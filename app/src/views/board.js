@@ -83,7 +83,7 @@ export async function renderBoard(root, query = '') {
     <div class="cards" id="cards">${'<div class="skel"></div>'.repeat(6)}</div>`;
 
   const data = await openBounties();
-  state.items = (data.items || []).filter((c) => c.status === 'open' || !c.status);
+  state.items = (data.items || []).filter((c) => (c.status === 'open' || !c.status) && new Date(c.deadline) > new Date());
   const cats = [...new Set(state.items.map((c) => c.category).filter(Boolean))].sort();
   const catSel = root.querySelector('#cat');
   for (const cat of cats) {

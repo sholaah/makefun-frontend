@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="fun.board — a fast, readable front window on make.fun: live bounties, rewards, leaderboards and builder profiles.">
+<title>fun.board — make.fun, at a glance</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="topbar">
+  <a class="brand" href="#/">fun<span class="brand-dot">.</span>board</a>
+  <nav class="topnav" aria-label="Main">
+    <a href="#/" data-nav="board">Bounties</a>
+    <a href="#/leaderboard" data-nav="leaderboard">Leaderboard</a>
+  </nav>
+  <form class="topsearch" id="search-form" role="search">
+    <input id="search-input" type="search" placeholder="Search bounties…" aria-label="Search bounties" autocomplete="off">
+  </form>
+</header>
+<main id="view" class="view" aria-live="polite"></main>
+<footer class="foot">
+  <span>fun.board reads make.fun's public API live. Times are your local time.</span>
+  <a href="https://make.fun" target="_blank" rel="noopener">make.fun ↗</a>
+</footer>
+<script type="module" src="src/main.js"></script>
+</body>
+</html>

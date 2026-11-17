@@ -1,49 +1,48 @@
-// Small formatting helpers shared by every view: money, counts, dates, countdowns,
-// HTML escaping, and a tiny safe Markdown renderer for bounty descriptions.
+// format.js — small display helpers shared by every view.
 
-const usdFmt = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' });
-const usdWhole = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
-const intFmt = new Intl.NumberFormat('en-US');
+const usd = new Intl.NumberFormat("en-US", {
+  style: "currency",
+  currency: "USD",
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+});
 
-/** $1,325 or $795.50: whole dollars drop the cents, anything else keeps them. */
-export function usd(n) {
-  if (n === null || n === undefined || Number.isNaN(Number(n))) return '—';
-  const v = Number(n);
-  return Number.isInteger(v) ? usdWhole.format(v) : usdFmt.format(v);
+/** 1234.5 -> "$1,234.50"; null/NaN -> "—" */
+export function money(value) {
+  const n = Number(value);
+  return Number.isFinite(n) ? usd.format(n) : "—";
 }
 
-export function int(n) {
-  if (n === null || n === undefined || Number.isNaN(Number(n))) return '—';
-  return intFmt.format(Number(n));
+/** Compact money for tight card layouts: 12500 -> "$12.5k". */
+export function moneyShort(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return "—";
+  if (Math.abs(n) >= 1000) return "$" + (n / 1000).toFixed(1).replace(/\.0$/, "") + "k";
+  return money(n);
 }
 
-/** Escape a string for HTML text or attribute use. */
-export function esc(s) {
-  return String(s ?? '')
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;')
-    .replaceAll("'", '&#39;');
-}
+const dateFmt = new Intl.DateTimeFormat("en-GB", {
+  day: "numeric",
+  month: "short",
+  year: "numeric",
+  hour: "2-digit",
+  minute: "2-digit",
+});
 
-/** "Tue 18 Nov, 01:00" in the reader's local time. */
+/** ISO string -> "17 Nov 2026, 12:30" (local time). */
 export function dateTime(iso) {
-  if (!iso) return '—';
   const d = new Date(iso);
-  return d.toLocaleString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+  return Number.isNaN(d.getTime()) ? "—" : dateFmt.format(d);
 }
 
-export function dateOnly(iso) {
-  if (!iso) return '—';
-  return new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
-}
-
-/** A compact countdown: "2d 4h", "3h 12m", "41m", "ENDED", or "LIVE". */
+/**
+ * Human countdown to an ISO deadline: "3d 4h left", "5h 12m left",
+ * "42m left", "closed" once the moment has passed.
+ */
 export function timeLeft(iso, now = Date.now()) {
-  if (!iso) return '—';
   const ms = new Date(iso).getTime() - now;
-  if (ms <= 0) return 'ENDED';
+  if (!Number.isFinite(ms)) return "—";
+  if (ms <= 0) return "closed";
   const mins = Math.floor(ms / 60000);
   const days = Math.floor(mins / 1440);
   const hours = Math.floor((mins % 1440) / 60);
@@ -52,79 +51,28 @@ export function timeLeft(iso, now = Date.now()) {
   return `${mins}m left`;
 }
 
-/** How urgent a deadline is, for colouring: soon (<6h), today (<24h), later. */
-export function urgency(iso, now = Date.now()) {
-  if (!iso) return 'later';
+/** CSS class for a deadline: urgent < 6h, soon < 24h. */
+export function urgencyClass(iso, now = Date.now()) {
   const ms = new Date(iso).getTime() - now;
-  if (ms <= 0) return 'ended';
-  if (ms < 6 * 3600e3) return 'soon';
-  if (ms < 24 * 3600e3) return 'today';
-  return 'later';
+  if (!Number.isFinite(ms) || ms <= 0) return "";
+  if (ms < 6 * 3600e3) return "countdown urgent";
+  if (ms < 24 * 3600e3) return "countdown soon";
+  return "countdown";
 }
 
-/** A shortened Solana address: 4WUU…qnL3. */
-export function shortAddress(a) {
-  if (!a || a.length < 10) return a || '—';
-  return `${a.slice(0, 4)}…${a.slice(-4)}`;
+/** Cut a string at a word boundary and add an ellipsis. */
+export function truncate(text, max = 140) {
+  const s = String(text ?? "");
+  if (s.length <= max) return s;
+  const cut = s.slice(0, max);
+  return cut.slice(0, cut.lastIndexOf(" ") || max).trimEnd() + "…";
 }
 
-/**
- * A deliberately small Markdown renderer for bounty descriptions: headings, bold,
- * italic, inline code, code fences, links, bullet and numbered lists, paragraphs.
- * Input is escaped first, so nothing a sponsor writes can inject markup.
- */
-export function renderMarkdown(md) {
-  const lines = esc(md || '').split('\n');
-  const out = [];
-  let list = null;
-  let code = false;
-  const closeList = () => {
-    if (list) {
-      out.push(list === 'ul' ? '</ul>' : '</ol>');
-      list = null;
-    }
-  };
-  const inline = (t) => t
-    .replace(/`([^`]+)`/g, '<code>$1</code>')
-    .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
-    .replace(/(^|\W)\*([^*\n]+)\*/g, '$1<em>$2</em>')
-    .replace(/\[([^\]]+)\]\((https?:[^)\s]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
-  for (const raw of lines) {
-    const line = raw.trimEnd();
-    if (line.startsWith('```')) {
-      closeList();
-      out.push(code ? '</code></pre>' : '<pre><code>');
-      code = !code;
-      continue;
-    }
-    if (code) {
-      out.push(line);
-      continue;
-    }
-    const h = line.match(/^(#{1,4})\s+(.*)$/);
-    if (h) {
-      closeList();
-      const level = Math.min(4, h[1].length + 1);
-      out.push(`<h${level}>${inline(h[2])}</h${level}>`);
-      continue;
-    }
-    const bullet = line.match(/^\s*[-*]\s+(.*)$/);
-    const numbered = line.match(/^\s*\d+[.)]\s+(.*)$/);
-    if (bullet || numbered) {
-      const kind = bullet ? 'ul' : 'ol';
-      if (list !== kind) {
-        closeList();
-        out.push(kind === 'ul' ? '<ul>' : '<ol>');
-        list = kind;
-      }
-      out.push(`<li>${inline((bullet || numbered)[1])}</li>`);
-      continue;
-    }
-    closeList();
-    if (line.trim() === '') continue;
-    out.push(`<p>${inline(line)}</p>`);
-  }
-  closeList();
-  if (code) out.push('</code></pre>');
-  return out.join('\n');
+/** Escape a value for safe interpolation into HTML. */
+export function esc(value) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;");
 }

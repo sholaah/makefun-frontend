@@ -1,24 +1,55 @@
-// The hash router: every surface has its own address, and navigation swaps only the
-// view's contents — the top bar, the footer and the scroll frame never rebuild.
+// router.js — a tiny hash router.
 //
-//   #/                      the board
-//   #/bounty/<slug>         one bounty's page
-//   #/leaderboard           the global rankings
-//   #/profile/<handle>      a builder's public profile
+// Routes are patterns like "#/bounty/:slug". The router parses the
+// current hash, finds the first matching pattern, and calls its handler
+// with the captured params plus the query string as a plain object.
 
-export function parseRoute() {
-  const raw = location.hash.replace(/^#\/?/, '');
-  const [head, param] = raw.split('/');
-  if (head === 'bounty' && param) return { name: 'bounty', param: decodeURIComponent(param) };
-  if (head === 'leaderboard') return { name: 'leaderboard' };
-  if (head === 'profile' && param) return { name: 'profile', param: decodeURIComponent(param) };
-  return { name: 'board' };
+export function parseHash(hash = location.hash) {
+  const raw = hash.replace(/^#/, "") || "/";
+  const [pathPart, queryPart] = raw.split("?");
+  const segments = pathPart.split("/").filter(Boolean);
+  const query = Object.fromEntries(new URLSearchParams(queryPart ?? ""));
+  return { segments, query };
 }
 
-/** Run `handler(route)` now and on every hash change. Returns an unsubscribe. */
-export function onRoute(handler) {
-  const run = () => handler(parseRoute());
-  window.addEventListener('hashchange', run);
-  run();
-  return () => window.removeEventListener('hashchange', run);
+function matchSegments(pattern, segments) {
+  const parts = pattern.split("/").filter(Boolean);
+  if (parts.length !== segments.length) return null;
+  const params = {};
+  for (let i = 0; i < parts.length; i++) {
+    if (parts[i].startsWith(":")) {
+      params[parts[i].slice(1)] = decodeURIComponent(segments[i]);
+    } else if (parts[i] !== segments[i]) {
+      return null;
+    }
+  }
+  return params;
+}
+
+export function createRouter(routes, fallback) {
+  function dispatch() {
+    const { segments, query } = parseHash();
+    for (const [pattern, handler] of routes) {
+      const params = matchSegments(pattern, segments);
+      if (params) {
+        handler({ ...params, query });
+        return;
+      }
+    }
+    fallback();
+  }
+  return {
+    start() {
+      addEventListener("hashchange", dispatch);
+      dispatch();
+    },
+    go(path) {
+      location.hash = path;
+    },
+  };
+}
+
+/** Build a hash link for a route, e.g. link("/bounty/abc") -> "#/bounty/abc". */
+export function link(path) {
+  return "#" + (path.startsWith("/") ? path : "/" + path);
 }

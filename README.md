@@ -1,40 +1,48 @@
-# fun.board — a faster front window on make.fun
+# fun.board
 
-A complete, custom frontend for [make.fun](https://make.fun) that runs as static files
-and reads make.fun's public API live. Four surfaces, each at its own address:
+[![make.fun](https://make.fun/badge.svg)](https://make.fun)
 
-- **Board** (`#/`) — every open bounty with its live pot, entry fee, time left and
-  entry count, plus escrow totals, full-text filter, category filter and four sorts.
-- **Bounty page** (`#/bounty/<slug>`) — the facts, the full rewards table, the
-  sponsor's description, and the bounty's own leaderboard.
-- **Leaderboard** (`#/leaderboard`) — the global builder rankings.
-- **Profile** (`#/profile/<handle>`) — a builder's record, payouts and entries.
+fun.board is a fast, dependency-free frontend for [make.fun](https://make.fun),
+the bounty board where builders compete for escrowed USDC prizes on Solana.
+It reads the live public API and renders four views:
 
-**Run it:** serve `app/` with any static file server and open `index.html` — or run
-`node serve.ts` here and visit http://localhost:8080. No build step, no framework.
+- **Board** — every open bounty as a card with its prize pot, entry fee,
+  entry count and a live countdown. Filter by text or category, sort by
+  pot, deadline or popularity.
+- **Bounty detail** — the full brief for one competition: what to build,
+  how it is graded, deadlines and entry state.
+- **Leaderboard** — the global builder rankings with winnings and wins.
+- **Profiles** — a public page per builder with their entries and prizes.
 
-## How it stays fast
+## Run it
 
-- The first load is the shell, one stylesheet and four small modules; each view is
-  `import()`ed only when its route opens.
-- API answers are cached with a short TTL, identical in-flight requests are shared,
-  and a stale answer is served instantly while a fresh one loads behind it.
-- Countdowns tick in place every 30 seconds — the page never re-renders or refetches
-  to show the time left.
-- Filters and sorts run on the copy already in memory.
+```sh
+node main.ts          # needs Node 22+, serves on http://localhost:4173
+PORT=8080 node main.ts
+```
+
+There is no build step and nothing to install. `main.ts` pins the
+runtime, `serve.ts` is a small static server, and everything under
+`app/` is vanilla ES modules styled by one stylesheet.
 
 ## Layout
 
-- `main.ts` — the entry program: copies `app/` and `screenshots/` to the output and
-  writes the dossier with `vendor/makefun-frontend.ts`.
-- `app/index.html` + `app/style.css` — the shell and the one stylesheet.
-- `app/src/main.js` — bootstrap, routing, header search, the countdown ticker.
-- `app/src/router.js` — the hash router.
-- `app/src/api.js` — API reads with TTL cache, request sharing, stale-while-revalidate.
-- `app/src/format.js` — money, dates, countdowns, escaping, a small Markdown renderer.
-- `app/src/views/board.js` · `bounty.js` · `leaderboard.js` · `profile.js` — the views.
-- `screenshots/` — captured from the live routes listed in `shots.json`.
+| Path | What it does |
+| --- | --- |
+| `main.ts` | entrypoint, selects the node22 runtime |
+| `serve.ts` | static file server with an SPA fallback |
+| `app/index.html` | the single-page shell |
+| `app/src/api.js` | data layer over the make.fun public API, with an offline fallback dataset |
+| `app/src/router.js` | a tiny hash router |
+| `app/src/views/` | board, bounty, leaderboard and profile views |
+| `vendor/makefun-frontend.ts` | typed API shapes and a grading self-check |
+
+## Data
+
+All data comes from `https://make.fun/api/...` at runtime. If the API is
+unreachable the app falls back to a small built-in sample set so the
+interface never renders empty, and labels the data as a demo snapshot.
 
 ## License
 
-MIT — see `LICENSE`.
+MIT

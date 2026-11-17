@@ -1,65 +1,59 @@
-// fun.board's bootstrap: the router, the header search, and the countdown ticker.
-//
-// The first load is this file plus api/format/router and the stylesheet — the four
-// views are import()ed only when their route is opened, so they never weigh on the
-// board's first paint. The ticker refreshes countdown labels in place every 30 s;
-// nothing re-renders, nothing refetches.
+// main.js — boots fun.board: chrome (header/footer), then the router.
 
-import { onRoute } from './router.js';
-import { paintCountdowns } from './views/board.js';
+import { createRouter, link, parseHash } from "./router.js";
+import { renderBoard } from "./views/board.js";
+import { renderBounty } from "./views/bounty.js";
+import { renderLeaderboard } from "./views/leaderboard.js";
+import { renderProfile } from "./views/profile.js";
 
-const view = document.getElementById('view');
-const navLinks = document.querySelectorAll('[data-nav]');
+const headerEl = document.getElementById("site-header");
+const footerEl = document.getElementById("site-footer");
+const appEl = document.getElementById("app");
 
-const loaders = {
-  board: () => import('./views/board.js'),
-  bounty: () => import('./views/bounty.js'),
-  leaderboard: () => import('./views/leaderboard.js'),
-  profile: () => import('./views/profile.js'),
-};
+const NAV = [
+  { path: "/", label: "Board" },
+  { path: "/leaderboard", label: "Leaderboard" },
+];
 
-let boardQuery = '';
-
-function setNav(name) {
-  navLinks.forEach((a) => a.classList.toggle('active', a.dataset.nav === name || (name === 'profile' && a.dataset.nav === 'leaderboard')));
+function renderChrome() {
+  const { segments } = parseHash();
+  const here = "/" + segments.join("/");
+  headerEl.innerHTML = `
+    <div class="site-header"><div class="wrap">
+      <a class="logo" href="${link("/")}">fun<span class="dot">.</span>board</a>
+      <nav class="main-nav">
+        ${NAV.map((n) => `<a href="${link(n.path)}" class="${here === n.path ? "active" : ""}">${n.label}</a>`).join("")}
+        <a href="https://make.fun" target="_blank" rel="noopener">make.fun ↗</a>
+      </nav>
+    </div></div>`;
+  footerEl.innerHTML = `
+    <div class="site-footer"><div class="wrap">
+      <span>fun.board — an independent frontend for make.fun bounties.</span>
+      <span>Data: live public API · Prizes escrowed in USDC on Solana</span>
+    </div></div>`;
 }
 
-async function show(route) {
-  setNav(route.name);
-  window.scrollTo(0, 0);
-  try {
-    if (route.name === 'board') {
-      const m = await loaders.board();
-      await m.renderBoard(view, boardQuery);
-    } else if (route.name === 'bounty') {
-      const m = await loaders.bounty();
-      await m.renderBounty(view, route.param);
-    } else if (route.name === 'leaderboard') {
-      const m = await loaders.leaderboard();
-      await m.renderLeaderboard(view);
-    } else if (route.name === 'profile') {
-      const m = await loaders.profile();
-      await m.renderProfile(view, route.param);
-    }
-  } catch (err) {
-    view.innerHTML = `<div class="error">Could not load this page from make.fun (${err.message}). Check your connection and reload.</div>`;
-  }
+function notFound() {
+  appEl.innerHTML = `
+    <div class="page-head"><h1>Not on this board</h1>
+    <p>That page does not exist. <a href="${link("/")}">Back to the board</a>.</p></div>`;
 }
 
-onRoute(show);
+const router = createRouter(
+  [
+    ["/", () => renderBoard(appEl)],
+    ["/leaderboard", () => renderLeaderboard(appEl)],
+    ["/bounty/:slug", ({ slug }) => renderBounty(appEl, slug)],
+    ["/u/:handle", ({ handle }) => renderProfile(appEl, handle)],
+  ],
+  notFound,
+);
 
-// Header search: typing and submitting lands on the board, filtered.
-const form = document.getElementById('search-form');
-const input = document.getElementById('search-input');
-form.addEventListener('submit', (e) => {
-  e.preventDefault();
-  boardQuery = input.value.trim();
-  if (location.hash === '#/' || location.hash === '' || location.hash === '#') {
-    show({ name: 'board' });
-  } else {
-    location.hash = '#/';
-  }
-});
+renderChrome();
+addEventListener("hashchange", renderChrome);
+router.start();
 
-// Countdowns tick in place: labels carry their deadline, only their text changes.
-setInterval(() => paintCountdowns(view), 30_000);
+// Keep countdowns honest while a page sits open.
+setInterval(() => {
+  if (document.querySelector("[data-closes-at]")) router.start && dispatchEvent(new HashChangeEvent("hashchange"));
+}, 60000);
